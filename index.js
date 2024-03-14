@@ -1,16 +1,16 @@
 const express = require("express");
+
+const router = express.Router();
+const app = express();
 const crypto = require("crypto");
 const mongoose = require("mongoose");
 const path = require("path");
 const nodemailer = require("nodemailer");
-
-const app = express();
 const port = 3000;
-
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "view"));
-
 const bodyParser = require("body-parser");
+
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
@@ -23,10 +23,14 @@ const userSchema = new Schema({
   username: String,
   email: String,
   password: String,
-  token: String // Added missing token field
 });
 
 const User = model("User", userSchema);
+// const newUser = new User({ name: 'JohnDoe', email: 'john@example.com', age: 30 });
+// newUser.save().then(() => console.log('User created'));
+// User.find().then(users=>{
+//   console.log(users)
+// })
 
 app.get("/", (req, res) => {
   res.send("Hello World");
@@ -48,7 +52,6 @@ app.post("/register", (req, res) => {
     username,
     email,
     password,
-    token: "" // Added missing token assignment
   });
 
   newUser.save().then(() => console.log("User created"));
@@ -67,8 +70,8 @@ app.get("/new", (req, res) => {
 });
 
 app.post("/login", (req, res) => {
-  const { username1, password1 } = req.body;
-  User.findOne({ username: username1, password: password1 })
+  const { username1, password1 } = req.body; // Corrected variable names
+  User.findOne({ username: username1, password: password1 }) // Using findOne to find a single user
     .then((user) => {
       if (user) {
         res.redirect("/home");
@@ -80,61 +83,120 @@ app.post("/login", (req, res) => {
       console.error(error);
       res.send("Error logging in");
     });
+
+  // if(username1==User.findOne("username") && password1==User.findOne("password")["password"]){
+  //   res.redirect("/home");
+  // }else{
+  //   res.send("User not found in database");
+  // }
 });
 
 app.get("/forgot-password", (req, res) => {
   res.render("forgot-password.ejs");
 });
 
-app.post("/forgot-password", async (req, res) => { // Added async keyword
-  try {
-    const { email } = req.body;
-    const user = await User.findOne({ email }); // Added await keyword and updated variable name
+// Middleware to parse JSON bodies
+app.use(express.json());
 
-    if (!user) {
-      return res.send("User not found");
-    }
+// Route for adding new data
+app.post("/addData", async (req, res) => {
+  // Destructuring data from request body
+  const { firstname, lastname, username, email, password } = req.body;
 
-    const resetToken = crypto.randomBytes(20).toString("hex");
-    user.token = resetToken;
-    await user.save();
-
-    console.log(user);
-
-    const sendPasswordResetEmail = async (email, resetToken) => {
-      const transporter = nodemailer.createTransport({
-        service: "Gmail",
-        auth: {
-          user: "mukuldhaked9413@gmail.com", // Your Gmail email address
-          pass: "DHAKEDmukul@123", // Your Gmail password or application-specific password
-        },
-      });
-
-      const mailOptions = {
-        from: "mukuldhaked9413@gmail.com",
-        to: email,
-        subject: "Password Reset",
-        text: `Click the link to reset your password: http://localhost:3000/forgot-password?token=${resetToken}`,
-      };
-
-      try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log("Password reset email sent:", info.response);
-      } catch (error) {
-        console.error("Error sending password reset email:", error);
-        throw error;
-      }
-    };
-
-    console.log("email", email, "reset Token ", resetToken);
-    await sendPasswordResetEmail(email, resetToken); // Added await keyword
-    res.status(200).json({ message: "Password reset email sent" });
-  } catch (error) {
-    console.error("Error sending password reset email:", error);
-    res.status(500).json({ message: "Internal server error" });
-  }
+  // Creating a new instance of User model with request body
+  const addData = new User(req.body);
+  console.log(req.body);
+  const newsave = await addData.save();
+  res.send(newsave);
 });
 
-app.listen(port, () => {
-  console.log(`Listening on port ${port}`);
+// Route for fetching all data
+app.get("/addData", async (req, res) => {
+  // Finding all data in the database
+  const getData = await User.find({});
+  res.status(201).send(getData);
+  console.log(getData);
+});
+
+// Route for fetching data by ID
+app.get("/addData/:id", async (req, res) => {
+  // Extracting the ID from request parameters
+  const _id = req.params.id;
+
+  // Finding data in the database by ID
+  const getDataId = await User.findById(_id);
+  res.status(201).send(getDataId);
+  console.log(getDataId);
+});
+
+// Route for updating data by ID
+app.patch("/addData/:id", async (req, res) => {
+  // Extracting the ID from request parameters
+  const _id = req.params.id;
+
+  // Updating data in the database by ID
+  const updateData = await User.findByIdAndUpdate(_id, req.body);
+  res.status(201).send(updateData);
+  console.log("the updated data is ", updateData);
+});
+
+// Route for deleting data by ID
+app.delete("/addData/:id", async (req, res) => {
+  // Extracting the ID from request parameters
+  const _id = req.params.id;
+
+  // Deleting data from the database by ID
+  const deleteData = await User.findByIdAndDelete(_id);
+  res.status(201).send(deleteData);
+  console.log("the deleted data is ", deleteData);
+});
+
+
+
+// app.post("/forgot-password", (req, res) => {
+//   const { email } = req.body;
+
+//   User.findOne({ email: email })
+//     .then((user) => {
+//       if (user) {
+//         res.redirect("/new");
+//       } else {
+//         res.send("incorrect email");
+//       }
+//     })
+//     .catch((error) => {
+//       console.error(error);
+//       res.send("Error logging in");
+//     });
+
+// const transporter = nodemailer.createTransport({
+//   host: "smtp.gmail.com",
+//   port: 465,
+//   secure: false, // Use `true` for port 465, `false` for all other ports
+//   auth: {
+//     user:"mukuldhaked9413@gmail.com",
+//     pass: "DHAKEDmukul@123",
+//   },
+//   debug:true,
+// });
+
+// async function main() {
+//   // send mail with defined transport object
+//   const info = await transporter.sendMail({
+//     from: '"Maddison Foo Koch 👻" <mukuldhaked9413@gmail.com>', // sender address
+//     to: "mukuldhaked9413@gmail.com",
+//     text: "Hello world?",
+//     html: "<b>Hello world?</b>",
+//   });
+
+//       console.log("Message sent: %s", info.messageId);
+
+//     }
+//     main();
+//     main().catch(console.error);
+
+// });
+
+app.listen(3000, () => {
+  console.log("listening on port 3000");
 });
