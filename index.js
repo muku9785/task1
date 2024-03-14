@@ -1,91 +1,109 @@
-const express = require("express");
-const mongoose = require("mongoose");
-const app = express();
-const port = 3000;
-const bodyParser = require("body-parser");
-app.use(bodyParser.json());
-app.use(express.json());
+// Required dependencies
+const express = require("express"); // Importing Express.js framework
+const mongoose = require("mongoose"); // Importing Mongoose ORM for MongoDB
+const bodyParser = require("body-parser"); // Middleware for parsing JSON body
+const app = express(); // Initializing Express app
+const port = 3000; // Port number for server
+
+// Middleware setup
+app.use(bodyParser.json()); // Using body-parser to parse JSON requests
+app.use(express.json()); // Parsing JSON requests with Express
+
+// Connecting to MongoDB database named 'like_comment'
 mongoose.connect("mongodb://localhost:27017/like_comment");
 
+// Defining schema for a post in MongoDB
 const postSchema = new mongoose.Schema({
-  content: String,
-  likes: { type: Number, default: 0 },
-  comments: [
+  content: String, // Content of the post
+  likes: { type: Number, default: 0 }, // Number of likes for the post, defaults to 0
+  comments: [ // Array of comments for the post
     {
-      content: String,
+      content: String, // Content of each comment
     },
   ],
 });
 
+// Creating a model 'Post' based on the defined schema
 const Post = mongoose.model("Post", postSchema);
 
+// Endpoint for creating a new post
 app.post("/posts", async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content } = req.body; // Extracting content from request body
+    // Creating a new post with the extracted content
     const post = await Post.create({ content });
-    res.status(201).json(post);
+    res.status(201).json(post); // Responding with created post
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
+// Endpoint for fetching all posts
 app.get("/posts", async (req, res) => {
   try {
+    // Finding all posts in the database
     const posts = await Post.find({});
-    res.status(200).json(posts);
+    res.status(200).json(posts); // Responding with fetched posts
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
+// Endpoint for updating a post
 app.patch("/posts/:postId", async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content } = req.body; // Extracting updated content from request body
+    // Finding and updating the post by its ID
     const updatedPost = await Post.findByIdAndUpdate(
       req.params.postId,
       { content },
-      { new: true }
+      { new: true } // Returning the updated post
     );
-    res.status(200).json(updatedPost);
+    res.status(200).json(updatedPost); // Responding with updated post
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
+// Endpoint for deleting a post
 app.delete("/posts/:postId", async (req, res) => {
   try {
+    // Finding and deleting the post by its ID
     const deletedPost = await Post.findByIdAndDelete(req.params.postId);
-    res.status(200).json(deletedPost);
+    res.status(200).json(deletedPost); // Responding with deleted post
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
-// Route for liking a post
+// Endpoint for liking a post
 app.post("/posts/:postId/like", async (req, res) => {
   try {
+    // Finding the post by its ID
     const post = await Post.findById(req.params.postId);
-    post.likes += 1;
-    await post.save();
-    res.status(201).json(post);
+    post.likes += 1; // Incrementing the likes count
+    await post.save(); // Saving the updated post
+    res.status(201).json(post); // Responding with updated post
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
-// Route for adding a comment to a post
+// Endpoint for adding a comment to a post
 app.post("/posts/:postId/comment", async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content } = req.body; // Extracting comment content from request body
+    // Finding the post by its ID and adding the comment
     const post = await Post.findById(req.params.postId);
-    post.comments.push({ content });
-    await post.save();
-    res.status(201).json(post);
+    post.comments.push({ content }); // Pushing the new comment to the post's comments array
+    await post.save(); // Saving the updated post
+    res.status(201).json(post); // Responding with updated post
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message }); // Handling errors
   }
 });
 
+// Starting the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
