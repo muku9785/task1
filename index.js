@@ -1,159 +1,149 @@
-// Required dependencies
-const express = require("express"); // Importing Express.js framework
-const mongoose = require("mongoose"); // Importing Mongoose ORM for MongoDB
-const bodyParser = require("body-parser"); // Middleware for parsing JSON body
-const app = express(); // Initializing Express app
-const port = 3000; // Port number for server
-const multer = require("multer"); // Import Multer for handling file uploads
-const cloudinary = require("cloudinary").v2; // Import Cloudinary for image upload (optional)
-const fs = require("fs"); // Node.js file system module
+const express = require("express");
+const mongoose = require("mongoose");
+const bodyParser = require("body-parser");
+const jwt = require("jsonwebtoken");
+const path = require("path");
+const CryptoJS = require("crypto-js");
 
-// Middleware setup
-app.use(bodyParser.json()); // Using body-parser to parse JSON requests
-app.use(express.json()); // Parsing JSON requests with Express
+const app = express();
+const port = 3000;
 
-// Connecting to MongoDB database named 'like_comment'
-mongoose.connect("mongodb://localhost:27017/like_comment");
+mongoose.connect("mongodb://localhost:27017/intern", {});
+const { Schema, model } = mongoose;
 
-// Defining schema for a post in MongoDB
-const postSchema = new mongoose.Schema({
-  content: String, 
-  imgUrl:String,// Content of the post
-  likes: { type: Number, default: 0 }, // Number of likes for the post, defaults to 0
-  comments: [ // Array of comments for the post
-    {
-      content: String, // Content of each comment
-    },
-  ],
-
+const userSchema = new Schema({
+  firstname: String,
+  lastname: String,
+  username: String,
+  email: String,
+  password: String,
+encryptedData: String,
 });
+const User = model("User", userSchema);
 
-// Creating a model 'Post' based on the defined schema
-const Post = mongoose.model("Post", postSchema);
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "view"));
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
-// Endpoint for creating a new post
-app.post("/posts", async (req, res) => {
-  try {
-    const { content } = req.body; // Extracting content from request body
-    // Creating a new post with the extracted content
-    const post = await Post.create({ content });
-    res.status(201).json(post); // Responding with created post
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
+const secretKey = "mukul@12345";
+
+const generateToken = (user) => {
+  const payload = {
+    username: user.username,
+    email: user.email,
+  };
+  return jwt.sign(payload, secretKey, { expiresIn: "1h" });
+};
+
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
+
+  if (token == null) {
+    return res.sendStatus(401);
   }
+
+  jwt.verify(token, secretKey, (err, user) => {
+    if (err) {
+      return res.sendStatus(403);
+    }
+    req.user = user;
+    next();
+  });
+};
+
+const encryptData = (data, key) => {
+  return CryptoJS.AES.encrypt(data, key).toString();
+};
+
+const decryptData = (encryptedData, key) => {
+  const bytes = CryptoJS.AES.decrypt(encryptedData, key);
+  return bytes.toString(CryptoJS.enc.Utf8);
+};
+
+app.post("/encrypt", (req, res) => {
+  const { data, key } = req.body;
+  const encryptedData = encryptData(data, key);
+  const newUser = new User({ encryptedData });
+  newUser
+    .save()
+    .then(() => {
+      res.json({ encryptedData });
+      console.log(encryptedData);
+    })
+    .catch((error) => {
+      console.error(error);
+      res.status(500).send("Error  data");
+    });
 });
 
-// Endpoint for fetching all posts
-app.get("/posts", async (req, res) => {
-  try {
-    // Finding all posts in the database
-    const posts = await Post.find({});
-    res.status(200).json(posts); // Responding with fetched posts
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
-  }
+app.post("/decrypt", (req, res) => {
+  const { encryptedData,key } = req.body;
+  const dencryptedData = decryptData(encryptedData,key);
+  res.json({ dencryptedData });
 });
 
-// Endpoint for updating a post
-app.patch("/posts/:postId", async (req, res) => {
-  try {
-    const { content } = req.body; // Extracting updated content from request body
-    // Finding and updating the post by its ID
-    const updatedPost = await Post.findByIdAndUpdate(
-      req.params.postId,
-      { content },
-      { new: true } // Returning the updated post
-    );
-    res.status(200).json(updatedPost); // Responding with updated post
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
-  }
+app.get("/", (req, res) => {
+  res.send("form ");
+});
+app.get("/login", (req, res) => {
+  res.render("login.ejs");
+});
+app.get("/register", (req, res) => {
+  res.render("register.ejs");
 });
 
-// Endpoint for deleting a post
-app.delete("/posts/:postId", async (req, res) => {
-  try {
-    // Finding and deleting the post by its ID
-    const deletedPost = await Post.findByIdAndDelete(req.params.postId);
-    res.status(200).json(deletedPost); // Responding with deleted post
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
-  }
+app.post("/register", async (req, res) => {
+  const { firstname, lastname, username, email, password } = req.body;
+
+  // Encrypt password using crypto-js before saving to the database
+  const encryptedPassword = encryptData(password, secretKey);
+
+  const newUser = new User({
+    firstname,
+    lastname,
+    username,
+    email,
+    password: encryptedPassword, // Save encrypted password
+  });
+
+  newUser
+    .save()
+    .then(() => {
+      const token = generateToken(newUser);
+      res.json({ token });
+      console.log(token);
+    })
+    .catch((error) => {
+      console.error(error);
+      res.status(500).send("Error registering user");
+    });
 });
 
-// Endpoint for liking a post
-app.post("/posts/:postId/like", async (req, res) => {
-  try {
-    // Finding the post by its ID
-    const post = await Post.findById(req.params.postId);
-    post.likes += 1; // Incrementing the likes count
-    await post.save(); // Saving the updated post
-    res.status(201).json(post); // Responding with updated post
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
-  }
+app.post("/login", (req, res) => {
+  const { username, password } = req.body;
+
+  User.findOne({ username, password })
+    .then((user) => {
+      if (user) {
+        const token = generateToken(user);
+        res.json({ token });
+        console.log(token);
+      } else {
+        res.status(401).send("Invalid credentials");
+      }
+    })
+    .catch((error) => {
+      console.error(error);
+      res.status(500).send("Error logging in");
+    });
 });
 
-// Endpoint for adding a comment to a post
-app.post("/posts/:postId/comment", async (req, res) => {
-  try {
-    const { content } = req.body; // Extracting comment content from request body
-    // Finding the post by its ID and adding the comment
-    const post = await Post.findById(req.params.postId);
-    post.comments.push({ content }); // Pushing the new comment to the post's comments array
-    await post.save(); // Saving the updated post
-    res.status(201).json(post); // Responding with updated post
-  } catch (error) {
-    res.status(500).json({ error: error.message }); // Handling errors
-  }
+app.get("/protected-route", authenticateToken, (req, res) => {
+  res.send("This is a protected route");
 });
 
-
-
-// const storage = multer.diskStorage({
-//   destination: (req, file, cb) => {
-//     cb(null, "/uploads"); // Specify the destination folder for uploads
-//   },
-//   filename: (req, file, cb) => {
-//     cb(null, file.WIN_20230210_18_05_32_Pro); // Use the original filename for the uploaded file
-//   },
-// });
-
-// const upload = multer({ storage: storage });
-
-// // Cloudinary configuration (optional)
-// cloudinary.config({
-//   cloud_name: "dntqobc30",
-//   api_key: "546869859179559",
-//   api_secret: "cNGPtiNIzFYedXa8nnpKZrWIK2M",
-// });
-
-// // Endpoint for uploading an image and creating a new post
-// app.post("/posts", upload.single("image"), async (req, res) => {
-//   console.log(req.file)
-//   try {
-//     const { content } = req.body;
-//     let imageUrl;
-
-//     // If using Cloudinary (optional), upload the image to Cloudinary and get the URL
-//     if (req.file && req.file.path) {
-//       const result = await cloudinary.uploader.upload(req.file.path);
-//       imageUrl = result.secure_url;
-      
-//       // Delete the uploaded file from the server
-//       fs.unlinkSync(req.file.path);
-//     }
-
-//     // Create a new post with image URL if available
-//     const post = await Post.create({ content, imageUrl });
-//     res.status(201).json(post);
-//   } catch (error) {
-//     res.status(500).json({ error: error.message });
-//   }
-// });
-
-
-// Starting the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
